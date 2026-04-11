@@ -1,6 +1,5 @@
-#!/usr/bin/env node
-// src/cli.ts
-// ─── Delta CLI ────────────────────────────────────────────────────────────
+    code:`#!/usr/bin/env node
+// src/cli.ts — UPDATED: --ignore flag with safe defaults
 // Installs as the 'delta' binary via package.json "bin" field.
 // Usage:
 //   delta run   <file.delta> [--preview] [--verbose]
@@ -17,59 +16,44 @@ import { tokenise } from "./lexer";
 import { parse }    from "./parser";
 import { resolve }  from "./resolver";
 import { emit }     from "./emitter";
+import { DEFAULT_IGNORE } from "./guards";
 
-const pkg     = require("../package.json");
+const pkg = require("../package.json");
 const program = new Command();
 
-program
-  .name("delta")
+program.name("delta")
   .description("Delta — Universal Code Transformation Language")
   .version(pkg.version);
 
-// ── delta run ─────────────────────────────────────────────────────────────
 program
   .command("run <file>")
   .description("Run a .delta transformation file")
-  .option("-p, --preview",  "Show diff without writing to disk")
-  .option("-v, --verbose",  "Verbose output")
-  .option("--cwd <dir>",    "Working directory", process.cwd())
+  .option("-p, --preview",           "Show diff without writing to disk")
+  .option("-v, --verbose",           "Verbose output")
+  .option("--cwd <dir>",             "Working directory", process.cwd())
+  .option("--ignore <patterns...>",  "Extra glob patterns to ignore", [])
   .action(async (file: string, opts) => {
-    const spinner = ora(\`Running \${chalk.amber(file)}\`).start();
+    const spinner = ora(\`Running \${chalk.yellow(file)}\`).start();
     try {
-      const src     = fs.readFileSync(path.resolve(opts.cwd, file), "utf8");
-      const tokens  = tokenise(src);
-      const ast     = parse(tokens);
-      const { order, registry, diagnostics } = resolve(ast, opts.cwd);
-
-      // Print diagnostics
+      const src = fs.readFileSync(path.resolve(opts.cwd, file), "utf8");
+      const { order, registry, diagnostics, hasErrors } = resolve(parse(tokenise(src)), opts.cwd);
       for (const d of diagnostics) {
-        if (d.severity === "error") {
-          spinner.fail(chalk.red(\`Error: \${d.message}\`));
-          process.exit(1);
-        }
-        if (d.severity === "warning") console.warn(chalk.yellow(\`Warning: \${d.message}\`));
+        if (d.severity==="error")   spinner.fail(chalk.red(\`Error: \${d.message}\`));
+        if (d.severity==="warning") console.warn(chalk.yellow(\`Warning: \${d.message}\`));
       }
+      if (hasErrors) process.exit(1);
 
-      spinner.text = "Applying transformations…";
-
+      const ignore = [...DEFAULT_IGNORE, ...(opts.ignore ?? [])];
       const results = await emit(order, registry, {
-        cwd:     opts.cwd,
-        preview: opts.preview ?? false,
-        verbose: opts.verbose ?? false,
+        cwd: opts.cwd, preview: opts.preview ?? false,
+        verbose: opts.verbose ?? false, ignore,
       });
-
-      const applied  = results.filter(r => r.applied).length;
+      const applied   = results.filter(r => r.applied).length;
       const previewed = results.filter(r => !r.applied).length;
-
-      if (opts.preview) {
+      if (opts.preview)
         spinner.succeed(chalk.cyan(\`Preview: \${previewed} file(s) would be modified\`));
-      } else {
-        spinner.succeed(
-          chalk.green(\`Done: \${applied} file(s) modified\`) +
-          (previewed ? chalk.dim(\` (\${previewed} previewed)\`) : "")
-        );
-      }
-
+      else
+        spinner.succeed(chalk.green(\`Done: \${applied} file(s) modified\`));
     } catch (err: any) {
       spinner.fail(chalk.red(err.message));
       if (opts.verbose) console.error(err.stack);
@@ -77,39 +61,52 @@ program
     }
   });
 
-// ── delta check ───────────────────────────────────────────────────────────
 program
   .command("check <file>")
-  .description("Parse and validate a .delta file without running it")
-  .option("--cwd <dir>", "Working directory", process.cwd())
+  .description("Validate a .delta file without running it")
+  .option("--cwd <dir>","Working directory", process.cwd())
   .action(async (file: string, opts) => {
     try {
-      const src  = fs.readFileSync(path.resolve(opts.cwd, file), "utf8");
-      const ast  = parse(tokenise(src));
-      const { diagnostics } = resolve(ast, opts.cwd);
+      const { diagnostics } = resolve(parse(tokenise(
+        fs.readFileSync(path.resolve(opts.cwd, file),"utf8")
+      )), opts.cwd);
       let hasError = false;
       for (const d of diagnostics) {
-        const icon = d.severity === "error" ? chalk.red("✗") : chalk.yellow("⚠");
+        const icon = d.severity==="error" ? chalk.red("✗") : chalk.yellow("⚠");
         console.log(\`\${icon} [\${d.span.start.line}:\${d.span.start.col}] \${d.message}\`);
-        if (d.severity === "error") hasError = true;
+        if (d.severity==="error") hasError = true;
       }
       if (!hasError) console.log(chalk.green("✓ No errors found"));
       process.exit(hasError ? 1 : 0);
-    } catch (e: any) {
-      console.error(chalk.red(e.message));
-      process.exit(1);
-    }
+    } catch (e: any) { console.error(chalk.red(e.message)); process.exit(1); }
   });
 
-// ── delta init ────────────────────────────────────────────────────────────
 program
   .command("init")
-  .description("Scaffold a starter .delta file for your project")
-  .option("--lang <lang>", "Primary language (ts|py|go|rust)", "ts")
-  .option("--cwd <dir>",   "Output directory", process.cwd())
+  .description("Scaffold a starter .delta file")
+  .option("--lang <lang>","Primary language (ts|py|go|rust)","ts")
+  .option("--cwd <dir>",  "Output directory", process.cwd())
   .action((opts) => {
-    const langMap: Record<string, string> = {
-      ts: "TypeScript", py: "Python", go: "Go", rust: "Rust"
+    const out = path.join(opts.cwd,"transform.delta");
+    fs.writeFileSync(out,
+\`// generated by: delta init --lang \${opts.lang}
+
+guard "baseline" {
+  scope:   "src/**"
+  assert:  all exported fns have return types
+  on_fail: warn
+}
+
+// Add your patch, fix, intent, or migrate blocks here
+// Preview: delta run transform.delta --preview
+// Apply:   delta run transform.delta
+\`,"utf8");
+    console.log(chalk.green(\`✓ Created \${out}\`));
+  });
+
+program.parse(process.argv);`
+  },
+{      ts: "TypeScript", py: "Python", go: "Go", rust: "Rust"
     };
     const lang = langMap[opts.lang] ?? "TypeScript";
     const template = \`// generated by: delta init --lang \${opts.lang}
