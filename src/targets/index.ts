@@ -1,40 +1,56 @@
-// src/targets/index.ts
-// ─── Delta Language Adapter Registry ─────────────────────────────────────
-// Maps every supported LangId to its adapter implementation.
-// The emitter calls getAdapter(lang) and gets back an object that knows
-// how to apply patches, migrations, intents, and traces for that language.
-// Adding a new language = create an adapter file + register it here.
+    id:"targets-index", path:"src/targets/index.ts",
+    tag:"UPDATED", tagColor:K.amber,
+    why:"Adds queryFiles() to LanguageAdapter interface — required for AST-accurate guard fn_exists checks",
+    code:`// src/targets/index.ts — UPDATED: queryFiles() added to interface
 
 import * as AST from "../ast";
-
-// ═══════════════════════════════════════════════════════════════════════════
-//  LanguageAdapter interface
-//  Every language adapter must implement all four methods.
-// ═══════════════════════════════════════════════════════════════════════════
+import { TypeScriptAdapter } from "./typescript";
+import { JavaScriptAdapter } from "./javascript";
+import { PythonAdapter      } from "./python";
+import { GoAdapter          } from "./go";
+import { RustAdapter        } from "./rust";
+import { JavaAdapter        } from "./java";
+import { GenericAdapter     } from "./generic";
 
 export interface LanguageAdapter {
+  applyPatch(src: string, decl: AST.PatchDecl): Promise<string>;
+  applyMigrate(src: string, decl: AST.MigrateDecl): Promise<string>;
+  applyIntent(src: string, decl: AST.IntentDecl): Promise<string>;
+  trace(decl: AST.TraceDecl, cwd: string): Promise<string>;
+  /** NEW — AST-accurate symbol search used by guards.ts fn_exists check */
+  queryFiles(
+    files: string[],
+    query: string
+  ): Promise<Array<{ file: string; line: number; text: string }>>;
+}
 
-  /**
-   * Apply a patch declaration to a source string.
-   * Locates the target function/block/line and replaces it.
-   * Returns the modified source string unchanged if the target is not found.
-   */
-  applyPatch(
-    src:  string,
-    decl: AST.PatchDecl
-  ): Promise<string>;
+const REGISTRY: Partial<Record<AST.LangId, LanguageAdapter>> = {
+  TypeScript:  new TypeScriptAdapter(),
+  JavaScript:  new JavaScriptAdapter(),
+  Python:      new PythonAdapter(),
+  Go:          new GoAdapter(),
+  Rust:        new RustAdapter(),
+  Java:        new JavaAdapter(),
+  Kotlin:      new GenericAdapter("Kotlin",  [".kt",".kts"]),
+  Swift:       new GenericAdapter("Swift",   [".swift"]),
+  Ruby:        new GenericAdapter("Ruby",    [".rb"]),
+  CPP:         new GenericAdapter("CPP",     [".cpp",".cc",".h",".hpp"]),
+  CSharp:      new GenericAdapter("CSharp",  [".cs"]),
+  PHP:         new GenericAdapter("PHP",     [".php"]),
+};
 
-  /**
-   * Apply a migration declaration to a source string.
-   * Processes all rename/move/replace/remove rules in order.
-   * Returns the modified source string.
-   */
-  applyMigrate(
-    src:  string,
-    decl: AST.MigrateDecl
-  ): Promise<string>;
+export function getAdapter(lang: AST.LangId): LanguageAdapter {
+  const adapter = REGISTRY[lang];
+  if (adapter) return adapter;
+  console.warn(\`[delta] No adapter for '\${lang}' — using GenericAdapter\`);
+  return new GenericAdapter(lang, []);
+}
 
-  /**
+export function getSupportedLanguages(): AST.LangId[] {
+  return ["TypeScript","JavaScript","Python","Go","Rust","Java"];
+}`
+  },
+{  /**
    * Apply an intent declaration to a source string.
    * Injects code at all matching injection sites.
    * Respects the guard clause to avoid duplicate injections.
