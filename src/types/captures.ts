@@ -69,6 +69,4 @@ export function applyWithCaptures(
     const captures: CaptureMap = new Map(Object.entries(groups ?? {}));
     return applyCaptures(replaceTemplate, captures);
   });
-}`
-  },
-  {
+}
