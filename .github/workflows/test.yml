@@ -1,8 +1,7 @@
 # id: "test-yml"
 # tag: "NEW FILE"
 # why: "Runs tests on every push and PR"
-name: Test
-...
+name: TestIs
 
 
 on:
