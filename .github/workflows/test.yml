@@ -1,4 +1,3 @@
-    :"test-yml", path:".github/workflows/test.yml",
 # id: "test-yml"
 # tag: "NEW FILE"
 # why: "Runs tests on every push and PR"
