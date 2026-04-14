@@ -1,8 +1,10 @@
-    id:"test-yml", path:".github/workflows/test.yml",
-    tag:"NEW FILE", tagColor:K.green,
-    why:"Runs tests on every push and PR — catches broken changes before they reach main",
-    code:`# .github/workflows/test.yml
+    :"test-yml", path:".github/workflows/test.yml",
+# id: "test-yml"
+# tag: "NEW FILE"
+# why: "Runs tests on every push and PR"
 name: Test
+...
+
 
 on:
   push:
