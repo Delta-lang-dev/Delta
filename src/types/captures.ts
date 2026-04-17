@@ -10,63 +10,30 @@ export type CaptureMap = Map<string, string>;
  * applyCaptures("logger.info($MSG)", Map{MSG: '"hello"'})
  * → 'logger.info("hello")'
  */
-export function applyCaptures(template: string, captures: CaptureMap): string {
-  let result = template;
-  captures.forEach((value, key) => {
-    result = result.replaceAll(\`$\${key}\`, value);
-    result = result.replaceAll(\`\\\${\${key}}\`, value);
+export function applyCaptures(template: string, captures: Map<string, string>): string {
+  return template.replace(/\$\{?([A-Z0-9_]+)\}?/g, (match, key) => {
+    return captures.get(key) ?? match; 
+    // Returns the match (e.g. $VAR) if it's not in our map
   });
-  return result;
 }
 
-/**
- * Extract $VAR names from a pattern string.
- * extractMetaVars("fn login($USER, $PASS)") → ["USER", "PASS"]
- */
-export function extractMetaVars(pattern: string): string[] {
-  const matches = pattern.matchAll(/\$([A-Z][A-Z0-9_]*)/g);
-  return [...matches].map(m => m[1]!);
-}
-
-/**
- * Build a RegExp from a pattern containing $VAR wildcards.
- * patternToRegex("logger($MSG)") → /logger\((?<MSG>[^,)\s]+)\)/
- */
 export function patternToRegex(pattern: string): RegExp {
   const escaped = pattern
     .replace(/[.*+?^{}()|[\]\\]/g, "\\$&")
-    .replace(/\\\$([A-Z][A-Z0-9_]*)/g, "(?<$1>[^,)\\s]+)");
-  return new RegExp(escaped, "gm");
+    // Match the escaped \$ followed by the name
+    .replace(/\\\$([A-Z][A-Z0-9_]*)/g, "(?<$1>.+?)"); 
+
+  // Use 'g' for multiple occurrences, 's' (dotAll) if code spans lines
+  return new RegExp(escaped, "g");
 }
 
-/**
- * Match a pattern with $VARs against source. Returns CaptureMap or null.
- */
-export function matchPattern(src: string, pattern: string): CaptureMap | null {
-  const re    = patternToRegex(pattern);
-  const match = re.exec(src);
-  if (!match?.groups) return null;
-  const captures: CaptureMap = new Map();
-  for (const [key, value] of Object.entries(match.groups)) {
-    if (value !== undefined) captures.set(key, value);
-  }
-  return captures;
-}
-
-/**
- * Apply find/replace with $VAR capture support across entire source.
- */
-export function applyWithCaptures(
-  src: string, findPattern: string, replaceTemplate: string
-): string {
-  const metaVars = extractMetaVars(findPattern);
-  if (metaVars.length === 0) {
-    return src.split(findPattern.trim()).join(replaceTemplate.trim());
-  }
+export function applyWithCaptures(src: string, findPattern: string, replaceTemplate: string): string {
   const re = patternToRegex(findPattern);
-  return src.replace(re, (_match, ...args) => {
+  
+  // Using the replacer function with the 'groups' argument
+  return src.replace(re, (...args) => {
     const groups = args[args.length - 1] as Record<string, string>;
-    const captures: CaptureMap = new Map(Object.entries(groups ?? {}));
-    return applyCaptures(replaceTemplate, captures);
+    const captureMap = new Map(Object.entries(groups || {}));
+    return applyCaptures(replaceTemplate, captureMap);
   });
 }
