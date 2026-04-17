@@ -11,9 +11,9 @@ import fg        from "fast-glob";
 import * as AST  from "../ast";
 import { LanguageAdapter } from "./index";
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════�[...]
 //  GenericAdapter
-// ═══════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════�[...]
 
 export class GenericAdapter implements LanguageAdapter {
 
@@ -30,10 +30,10 @@ export class GenericAdapter implements LanguageAdapter {
     return [];
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────��[...]
   //  applyPatch
   //  Locates the target using regex patterns and replaces the body.
-  // ─────────────────────────────────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────��[...]
 
   async applyPatch(src: string, decl: AST.PatchDecl): Promise<string> {
     const { find, replace } = decl;
@@ -76,11 +76,12 @@ export class GenericAdapter implements LanguageAdapter {
     replacement: string
   ): string {
     const cStylePattern = new RegExp(
-      `(?:export\\s+)?`(?:async\\s+)?(?:public\\s+|private\\s+|protected\\s+|static\\s+)*` +
-      `(?:function\\s+|fn\\s+|func\\s+)?` +
+      '(?:export\\s+)?' +
+      '(?:async\\s+)?(?:public\\s+|private\\s+|protected\\s+|static\\s+)*' +
+      '(?:function\\s+|fn\\s+|func\\s+)?' +
       `(${escapeRegex(fnName)})` +
-      `\\s*\\([^)]*\\)(?:\\s*:\\s*[^{]+?)?\\s*` +
-      `\\{`,
+      '\\s*\\([^)]*\\)(?:\\s*:\\s*[^{]+?)?\\s*' +
+      '\\{',
       "m"
     );
 
@@ -227,9 +228,9 @@ export class GenericAdapter implements LanguageAdapter {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────[...]
 //  Utility functions (stay outside the class)
-// ─────────────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────[...]
 
 export function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
