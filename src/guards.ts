@@ -214,5 +214,4 @@ function findFn(
 
 function escRe(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}    else           failures.push(result.msg);
-    }
+}
