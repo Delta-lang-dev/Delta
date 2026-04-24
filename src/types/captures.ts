@@ -27,7 +27,7 @@ export function applyCaptures(template: string, captures: CaptureMap): string {
   let result = template;
   for (const [key, value] of captures) {
     // Matches both $KEY and ${KEY} (most flexible and safe)
-    const re = new RegExp(`\\\( \\{? \){escapeRegExp(key)}\\}?`, 'g');
+    const re = new RegExp(`\\$\\{?${escapeRegExp(key)}\\}?`, 'g');
     result = result.replace(re, value);
   }
   return result;
