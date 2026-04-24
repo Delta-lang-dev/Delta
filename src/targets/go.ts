@@ -26,7 +26,7 @@ export class GoAdapter extends GenericAdapter {
   constructor() {
     super("Go", [".go"]);
     this.parser = new Parser();
-    this.parser.setLanguage(Go as unknown as Parser.Language);
+    this.parser.setLanguage(Go as any);
   }
 
   // ─────────────────────────────────────────────────────────────────────────
