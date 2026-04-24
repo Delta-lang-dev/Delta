@@ -2,18 +2,13 @@
 // ─── Delta Generic Language Adapter ──────────────────────────────────────
 // Regex and string-based fallback adapter used by any language that does
 // not yet have a dedicated tree-sitter or compiler API adapter.
-// All dedicated adapters (TypeScript, Python, Go, etc.) extend this class
-// and override only the methods they need to improve on.
+// All dedicated adapters extend this class and override what they need.
 
 import * as fs   from "fs";
 import * as path from "path";
 import fg        from "fast-glob";
 import * as AST  from "../ast";
 import { LanguageAdapter } from "./index";
-
-// ════════════════════════════════════════════════════════════════�[...]
-//  GenericAdapter
-// ════════════════════════════════════════════════════════════════�[...]
 
 export class GenericAdapter implements LanguageAdapter {
 
@@ -22,18 +17,7 @@ export class GenericAdapter implements LanguageAdapter {
     protected readonly extensions: string[]
   ) {}
 
-  /**
-   * Required by LanguageAdapter interface. 
-   * Provides a list of files to be processed by the engine.
-   */
-  queryFiles(): string[] {
-    return [];
-  }
-
-  // ───────────────────────────────────────────────────────────────��[...]
-  //  applyPatch
-  //  Locates the target using regex patterns and replaces the body.
-  // ───────────────────────────────────────────────────────────────��[...]
+  // ── applyPatch ────────────────────────────────────────────────────────────
 
   async applyPatch(src: string, decl: AST.PatchDecl): Promise<string> {
     const { find, replace } = decl;
@@ -47,9 +31,7 @@ export class GenericAdapter implements LanguageAdapter {
         const re = new RegExp(find.regex, "gm");
         return src.replace(re, replace.body);
       } catch (e) {
-        console.warn(
-          `[delta] Invalid regex in patch find clause: ${find.regex}`
-        );
+        console.warn(`[delta] Invalid regex in patch: ${find.regex}`);
         return src;
       }
     }
@@ -59,29 +41,26 @@ export class GenericAdapter implements LanguageAdapter {
       if (src.includes(target)) {
         return src.replace(target, replace.body.trim());
       }
-      console.warn(
-        `[delta] Block anchor '${find.label}' not found in target file`
-      );
+      console.warn(`[delta] Block anchor '${find.label}' not found`);
       return src;
     }
 
     return src;
   }
 
-  // ... (Keep all your existing protected/private methods below this)
-  
+  // ── replaceFunctionBody ───────────────────────────────────────────────────
+
   protected replaceFunctionBody(
     src:         string,
     fnName:      string,
     replacement: string
   ): string {
     const cStylePattern = new RegExp(
-      '(?:export\\s+)?' +
-      '(?:async\\s+)?(?:public\\s+|private\\s+|protected\\s+|static\\s+)*' +
-      '(?:function\\s+|fn\\s+|func\\s+)?' +
+      `(?:export\\s+)?(?:async\\s+)?` +
+      `(?:public\\s+|private\\s+|protected\\s+|static\\s+)*` +
+      `(?:function\\s+|fn\\s+|func\\s+)?` +
       `(${escapeRegex(fnName)})` +
-      '\\s*\\([^)]*\\)(?:\\s*:\\s*[^{]+?)?\\s*' +
-      '\\{',
+      `\\s*\\([^)]*\\)(?:\\s*:\\s*[^{]+?)?\\s*\\{`,
       "m"
     );
 
@@ -89,89 +68,81 @@ export class GenericAdapter implements LanguageAdapter {
     if (match) {
       const openBraceIdx = match.index + match[0].length - 1;
       const closeIdx     = findMatchingBrace(src, openBraceIdx);
-
       if (closeIdx !== -1) {
         const indent = getIndentAt(src, match.index);
-        const indentedReplacement = indentBlock(replacement, indent + "  ");
+        const indented = indentBlock(replacement, indent + "  ");
         return (
           src.slice(0, openBraceIdx + 1) +
-          "\n" + indentedReplacement + "\n" + indent +
+          "\n" + indented + "\n" + indent +
           src.slice(closeIdx)
         );
       }
     }
 
+    // Python def fallback
     const pyPattern = new RegExp(
       `^([ \\t]*)(async\\s+)?def\\s+${escapeRegex(fnName)}\\s*\\([^)]*\\)\\s*(?:->\\s*[^:]+)?:`,
       "m"
     );
-
     const pyMatch = pyPattern.exec(src);
     if (pyMatch) {
       const baseIndent  = pyMatch[1];
       const bodyIndent  = baseIndent + "    ";
       const defLineEnd  = pyMatch.index + pyMatch[0].length;
-      const lines     = src.slice(defLineEnd).split("\n");
-      let bodyLines   = 0;
-
+      const lines       = src.slice(defLineEnd).split("\n");
+      let bodyLines     = 0;
       for (let i = 1; i < lines.length; i++) {
         const line = lines[i];
-        if (line.trim() === "" || line.trim().startsWith("#")) {
-          bodyLines = i;
-          continue;
+        if (!line || line.trim() === "" || line.trim().startsWith("#")) {
+          bodyLines = i; continue;
         }
         if (!line.startsWith(bodyIndent)) break;
         bodyLines = i;
       }
-
-      const bodyStart = defLineEnd;
-      const bodyEnd   = defLineEnd + lines.slice(0, bodyLines + 1).join("\n").length;
-
+      const bodyEnd = defLineEnd +
+        lines.slice(0, bodyLines + 1).join("\n").length;
       const indentedBody = replacement
         .split("\n")
         .map(l => l.trim() ? bodyIndent + l.trim() : "")
         .join("\n");
-
-      return src.slice(0, bodyStart) + "\n" + indentedBody + src.slice(bodyEnd);
+      return src.slice(0, defLineEnd) + "\n" + indentedBody + src.slice(bodyEnd);
     }
 
-    console.warn(
-      `[delta:${this.langName}] Function '${fnName}' not found — patch skipped`
-    );
+    console.warn(`[delta:${this.langName}] Function '${fnName}' not found`);
     return src;
   }
+
+  // ── applyMigrate ──────────────────────────────────────────────────────────
 
   async applyMigrate(src: string, decl: AST.MigrateDecl): Promise<string> {
     let out = src;
     for (const rule of decl.rules) {
       if (rule.type === "rename") {
-        const from = rule.from.trim();
-        const to   = rule.to.trim();
-        if (!from || !to || from === to) continue;
-        out = replaceAll(out, from, to);
+        out = replaceAll(out, rule.from.trim(), rule.to.trim());
       }
       if (rule.type === "replace") {
-        const from = rule.from.trim();
-        const to   = rule.to.trim();
-        if (!from) continue;
-        out = replaceAll(out, from, to);
+        out = replaceAll(out, rule.from.trim(), rule.to.trim());
       }
       if (rule.type === "remove") {
-        const target = rule.target.trim();
-        out = out.split("\n").filter(line => !line.includes(target)).join("\n");
+        out = out.split("\n")
+          .filter(l => !l.includes(rule.target.trim()))
+          .join("\n");
       }
     }
     return out;
   }
 
+  // ── applyIntent ───────────────────────────────────────────────────────────
+
   async applyIntent(src: string, decl: AST.IntentDecl): Promise<string> {
     const lines  = src.split("\n");
     const inject = decl.inject.trim();
     const insertions: Array<{ line: number; code: string }> = [];
+
     const fnOpenRe = /^(\s*)(?:export\s+)?(?:async\s+)?(?:public\s+|private\s+|protected\s+)?(?:static\s+)?(?:function\s+|fn\s+|func\s+)?\w+\s*\([^)]*\)[^{]*\{/;
 
     for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
+      const line = lines[i]!;
       if (decl.where === "function_entry" && fnOpenRe.test(line)) {
         const indent = (line.match(/^(\s*)/)?.[1] ?? "") + "  ";
         const window = lines.slice(i + 1, i + 5).join("\n");
@@ -191,6 +162,8 @@ export class GenericAdapter implements LanguageAdapter {
     return lines.join("\n");
   }
 
+  // ── trace ─────────────────────────────────────────────────────────────────
+
   async trace(decl: AST.TraceDecl, cwd: string): Promise<string> {
     const absDir = path.resolve(cwd, decl.dir);
     const patterns = this.extensions.length > 0
@@ -198,14 +171,17 @@ export class GenericAdapter implements LanguageAdapter {
       : ["**/*"];
 
     const files = await fg(patterns, {
-      cwd,
+      cwd:    absDir,
       absolute: true,
-      ignore:   ["**/node_modules/**", "**/dist/**", "**/.git/**"],
+      ignore: ["**/node_modules/**", "**/dist/**", "**/.git/**"],
     });
 
-    const origin = decl.origin.trim();
-    const report: string[] = [];
+    const report: string[]  = [];
     const flagged: string[] = [];
+
+    report.push(`── Trace: ${decl.ident}  (${decl.dir})`);
+    report.push(`   Origin: ${decl.origin}`);
+    report.push("");
 
     for (const file of files) {
       const src   = fs.readFileSync(file, "utf8");
@@ -213,30 +189,62 @@ export class GenericAdapter implements LanguageAdapter {
       const rel   = path.relative(cwd, file);
 
       for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        if (!line.includes(decl.ident) && !line.includes(origin)) continue;
+        const line = lines[i]!;
+        if (!line.includes(decl.ident) && !line.includes(decl.origin)) continue;
         const lineRef = `${rel}:${i + 1}`;
         for (const flag of decl.flags) {
           if (matchesFlag(line, flag)) {
-            flagged.push(`  ⚠  FLAGGED: ${lineRef}\n     ${line.trim()}\n     Flag: "${flag}"`);
+            flagged.push(`  ⚠  FLAGGED: ${lineRef}`);
+            flagged.push(`     ${line.trim()}`);
+            flagged.push(`     Flag: "${flag}"`);
           }
         }
         report.push(`  → ${lineRef}  ${line.trim()}`);
       }
     }
-    return report.join("\n") + (flagged.length ? "\n\n" + flagged.join("\n") : "");
+
+    report.push("");
+    if (flagged.length > 0) {
+      report.push("── Flagged paths:");
+      report.push(...flagged);
+    } else {
+      report.push("── No flagged paths found");
+    }
+    report.push(`── Summary: ${files.length} file(s) scanned`);
+    return report.join("\n");
+  }
+
+  // ── queryFiles ────────────────────────────────────────────────────────────
+  // Required by LanguageAdapter interface.
+  // Used by guards.ts for AST-accurate fn_exists checks.
+
+  async queryFiles(
+    files: string[],
+    query: string
+  ): Promise<Array<{ file: string; line: number; text: string }>> {
+    const results: Array<{ file: string; line: number; text: string }> = [];
+    for (const file of files) {
+      const src   = fs.readFileSync(file, "utf8");
+      const lines = src.split("\n");
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i]!.includes(query)) {
+          results.push({ file, line: i + 1, text: lines[i]!.trim() });
+        }
+      }
+    }
+    return results;
   }
 }
 
-// ────────────────────────────────────────────────────────────────[...]
-//  Utility functions (stay outside the class)
-// ────────────────────────────────────────────────────────────────[...]
+// ── Exported utility functions ────────────────────────────────────────────────
+// Used by dedicated adapters that extend GenericAdapter.
 
 export function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 export function replaceAll(src: string, from: string, to: string): string {
+  if (!from || from === to) return src;
   const escaped = escapeRegex(from);
   try {
     const re = new RegExp(`(?<![\\w.])${escaped}(?![\\w])`, "g");
@@ -250,7 +258,7 @@ export function findMatchingBrace(src: string, openIdx: number): number {
   let depth = 0;
   let inStr: string | null = null;
   for (let i = openIdx; i < src.length; i++) {
-    const ch = src[i];
+    const ch   = src[i];
     const prev = src[i - 1];
     if (!inStr && (ch === '"' || ch === "'" || ch === "`") && prev !== "\\") {
       inStr = ch; continue;
@@ -260,10 +268,7 @@ export function findMatchingBrace(src: string, openIdx: number): number {
     }
     if (inStr) continue;
     if (ch === "{") depth++;
-    if (ch === "}") {
-      depth--;
-      if (depth === 0) return i;
-    }
+    if (ch === "}") { depth--; if (depth === 0) return i; }
   }
   return -1;
 }
@@ -274,14 +279,15 @@ export function getIndentAt(src: string, charIdx: number): string {
 }
 
 export function indentBlock(code: string, indent: string): string {
-  return code.split("\n").map(line => line.trim() ? indent + line.trimStart() : "").join("\n");
+  return code.split("\n")
+    .map(line => line.trim() ? indent + line.trimStart() : "")
+    .join("\n");
 }
 
 function matchesFlag(line: string, flag: string): boolean {
   const f = flag.toLowerCase();
   const l = line.toLowerCase();
-  if (f.includes("raw sql")) return /['"]SELECT|INSERT|UPDATE|DELETE/.test(line);
-  return f.split(" ").some(word => word.length > 3 && l.includes(word));
+  if (f.includes("raw sql")) return /['"`].*SELECT|INSERT|UPDATE|DELETE/.test(line);
+  if (f.includes("without hashing")) return l.includes("password") && !l.includes("hash");
+  return f.split(" ").filter(w => w.length > 3).some(word => l.includes(word));
 }
-
-const decl_ident_placeholder = "";
