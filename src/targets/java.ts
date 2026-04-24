@@ -25,7 +25,7 @@ export class JavaAdapter extends GenericAdapter {
   constructor() {
     super("Java", [".java"]);
     this.parser = new Parser();
-    this.parser.setLanguage(Java as unknown as Parser.Language);
+    this.parser.setLanguage(Java as any);
   }
 
   // ─────────────────────────────────────────────────────────────────────────
