@@ -25,7 +25,7 @@ export class RustAdapter extends GenericAdapter {
   constructor() {
     super("Rust", [".rs"]);
     this.parser = new Parser();
-    this.parser.setLanguage(Rust as unknown as Parser.Language);
+    this.parser.setLanguage(Rust as any);
   }
 
   // ─────────────────────────────────────────────────────────────────────────
