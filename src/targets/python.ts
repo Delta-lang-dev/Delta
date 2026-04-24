@@ -32,7 +32,7 @@ export class PythonAdapter extends GenericAdapter {
 
     // Initialise the tree-sitter parser with the Python grammar
     this.parser = new Parser();
-    this.parser.setLanguage(Python as unknown as Parser.Language);
+    this.parser.setLanguage(Python as any);
   }
 
   // ─────────────────────────────────────────────────────────────────────────
