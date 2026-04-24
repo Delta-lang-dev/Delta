@@ -197,7 +197,7 @@ async function checkAssert(
 
 function mkParser(lang: unknown): Parser {
   const p = new Parser();
-  p.setLanguage(lang as Parser.Language);
+  p.setLanguage(lang as any);
   return p;
 }
 
