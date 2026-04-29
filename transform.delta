@@ -1,0 +1,8 @@
+patch "test.py" in Python {
+  find fn get_user(user_id) {}
+  replace with {
+    query = "SELECT * FROM users WHERE id = ?"
+    return db.execute(query, (user_id,)).fetchone()
+  }
+  why: "Fix SQL injection"
+}
