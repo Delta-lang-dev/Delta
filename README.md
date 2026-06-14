@@ -1,101 +1,69 @@
-# Δ Delta — Universal Code Transformation Language
+# Δ Delta
 
-> Write change intent once. Apply it across Python, TypeScript, Rust, Go, Java, and more.
+**Universal code transformation language.**
+
+Delta lets you describe how code should change — across TypeScript, Python, Go, Rust, Java, and more — using six readable, composable constructs.
+
+```delta
+// Find every == null check in your TypeScript project
+// and upgrade it to strict equality.
+fix strictNull {
+  pattern:  { $X == null }
+  replace:  { $X === null }
+  scope:    "**/*.ts"
+  severity: bug
+}
+apply fix strictNull to project preview
+```
 
 ## Install
 
-\`\`\`bash
+```bash
 npm install -g @delta-lang/cli
-# or add as a dev dependency:
-npm install --save-dev @delta-lang/cli
-\`\`\`
+```
 
-## Quick Start
+## Six constructs
 
-\`\`\`bash
-# Scaffold a starter file
-delta init --lang ts
+| Construct | What it does |
+|---|---|
+| `patch` | Surgically replace a function or block in a specific file |
+| `fix` | Define a reusable pattern → replacement rule across your codebase |
+| `intent` | Inject code at every function entry or exit point |
+| `migrate` | Rename symbols, move files, remove deprecated APIs |
+| `guard` | Assert invariants before any transform runs |
+| `trace` | Follow data through your codebase, flag dangerous paths |
 
-# Check a .delta file for errors without running it
-delta check transform.delta
+## CLI
 
-# Preview changes (no files are written)
-delta run transform.delta --preview
+```bash
+delta run transform.delta          # run a transform
+delta run transform.delta --preview # preview without writing
+delta check transform.delta        # validate syntax only
+delta init                         # scaffold a starter transform.delta
+```
 
-# Apply changes for real
-delta run transform.delta
-\`\`\`
+## Documentation
 
-## Your First .delta File
+[delta-lang.dev/docs](https://delta-lang.dev/docs) — full reference for all six constructs.
 
-\`\`\`delta
-// fix a null-check bug in TypeScript
-patch "src/auth/login.ts" in TypeScript {
-  find fn verifyToken(token) {
-    return jwt.verify(token, SECRET)
-  }
-  replace with {
-    if (!token) return null
-    try { return jwt.verify(token, SECRET) } catch { return null }
-  }
-  why: "jwt.verify throws on null — guard added"
-}
-\`\`\`
+## Fix Library
 
-## All Constructs
+[github.com/Delta-Lang-Dev/fix-library](https://github.com/Delta-Lang-Dev/fix-library) — community transforms for TypeScript, Python, Go, security, and migrations.
 
-| Construct  | Purpose                              |
-|------------|--------------------------------------|
-| \`patch\`    | Surgical named code change           |
-| \`fix\`      | Reusable pattern replacement         |
-| \`intent\`   | High-level cross-cutting change      |
-| \`migrate\`  | API version-to-version upgrade       |
-| \`guard\`    | Invariants that block unsafe changes |
-| \`trace\`    | Data-flow analysis for debugging     |
-| \`apply\`    | Execute a fix / migrate / guard      |
+## Language support
 
-## VS Code Extension
+**Stable:** TypeScript · JavaScript · Python · Go · Rust
 
-Install from the marketplace:
+**Beta:** Java · Kotlin · Swift · Ruby · C++ · C# · PHP
 
-\`\`\`
-ext install delta-lang.delta-lang
-\`\`\`
+## VS Code extension
 
-Or install from VSIX:
-\`\`\`bash
-cd vscode-extension && npm run package
-code --install-extension delta-lang-1.0.0.vsix
-\`\`\`
+[vscode-delta](https://github.com/Delta-Lang-Dev/vscode-delta) — syntax highlighting, IntelliSense, LSP diagnostics, and run commands.
 
-## CI Integration (GitHub Actions)
+## Spec
 
-\`\`\`yaml
-name: Delta Guard Check
-on: [push, pull_request]
-jobs:
-  delta-check:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 20 }
-      - run: npm install -g @delta-lang/cli
-      - run: delta check guards.delta
-      - run: delta run guards.delta --preview
-\`\`\`
-
-## Supported Languages
-
-TypeScript · JavaScript · Python · Rust · Go · Java · Kotlin · Swift · Ruby · C++ · C# · PHP
-
-## How It Works
-
-Delta is a **pure compile-time transformation tool**. It reads \`.delta\` files,
-parses your target source files using tree-sitter (Python/Go/Rust/etc.) or
-the TypeScript Compiler API, applies your transformations, and writes
-modified source files back to disk. Zero runtime cost.
+[SPEC.md](./SPEC.md) — full language specification including EBNF grammar, compiler pipeline, and execution order.
 
 ## License
 
-MIT © Delta Language Contributors
+MIT — see [LICENSE](./LICENSE).
